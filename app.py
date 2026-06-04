@@ -7,7 +7,7 @@ app = Flask(__name__)
 CORS(app)  # Разрешаем твоему сайту делать запросы к этому серверу
 
 # Берем токен из настроек Render (Environment)
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
+BOT_TOKEN = "8941568548:AAF6AFi3ZQpaHVPzlQ9TS529zAAcITjwQ6c"
 # Твой личный ID в Telegram (куда бот будет слать сообщения)
 ADMIN_ID = "7586627550"  
 
