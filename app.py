@@ -16,7 +16,7 @@ def home():
     return "Bot server is running!"
 
 # Эндпоинт, куда сайт отправляет сообщения пользователей
-@app.route('/send_to_tg',彻 methods=['POST'])
+@app.route('/send_to_tg', methods=['POST'])
 def send_to_tg():
     data = request.get_json()
     if not data or 'message' not in data or 'client_id' not in data:
