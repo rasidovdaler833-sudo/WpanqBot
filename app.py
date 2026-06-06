@@ -34,8 +34,10 @@ init_db()
 def save_message(client_id, sender, message):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
-    c.execute("INSERT INTO messages (client_id, sender, message) VALUES (?, ?, ?)",
-              (client_id, sender, message))
+    c.execute(
+        "INSERT INTO messages (client_id, sender, message) VALUES (?, ?, ?)",
+        (client_id, sender, message)
+    )
     conn.commit()
     conn.close()
 
@@ -43,17 +45,21 @@ def save_message(client_id, sender, message):
 def get_messages(client_id):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
-    c.execute("SELECT sender, message FROM messages WHERE client_id=? ORDER BY id", (client_id,))
+    c.execute(
+        "SELECT sender, message FROM messages WHERE client_id=? ORDER BY id",
+        (client_id,)
+    )
     rows = c.fetchall()
     conn.close()
 
     return [{"sender": r[0], "message": r[1]} for r in rows]
 
 
-# ---------------- SEND TO TG ----------------
+# ---------------- SEND FROM SITE ----------------
 @app.route("/send", methods=["POST"])
 def send():
     data = request.json
+
     client_id = data["client_id"]
     message = data["message"]
 
@@ -72,7 +78,7 @@ def send():
     return jsonify({"ok": True})
 
 
-# ---------------- GET CHAT ----------------
+# ---------------- GET CHAT FOR SITE ----------------
 @app.route("/chat/<client_id>")
 def chat(client_id):
     return jsonify(get_messages(client_id))
@@ -83,27 +89,42 @@ def chat(client_id):
 def webhook():
     update = request.json
 
-    if "message" in update:
-        msg = update["message"]
-        chat_id = msg["chat"]["id"]
+    # ЛОГ (чтобы видеть что Telegram вообще доходит)
+    print("WEBHOOK HIT:", update)
 
-        if str(chat_id) != str(ADMIN_ID):
-            return "ok"
+    if "message" not in update:
+        return "ok"
 
-        if "reply_to_message" in msg:
-            text = msg["text"]
-            original = msg["reply_to_message"]["text"]
+    msg = update["message"]
 
-            # ищем ID
-            client_id = None
-            for line in original.split("\n"):
-                if "ID:" in line:
-                    client_id = line.replace("ID:", "").strip()
+    chat_id = msg["chat"]["id"]
 
-            if client_id:
-                save_message(client_id, "admin", text)
+    # только ты (админ)
+    if str(chat_id) != str(ADMIN_ID):
+        return "ok"
+
+    # ответ (reply)
+    if "reply_to_message" in msg and "text" in msg:
+        text = msg["text"]
+        original = msg["reply_to_message"]["text"]
+
+        client_id = None
+
+        for line in original.split("\n"):
+            if "ID:" in line:
+                client_id = line.replace("ID:", "").strip()
+
+        if client_id:
+            save_message(client_id, "admin", text)
+
+            print("ANSWER SAVED FOR:", client_id)
 
     return "ok"
+
+
+@app.route("/")
+def home():
+    return "Bot server is running!"
 
 
 if __name__ == "__main__":
