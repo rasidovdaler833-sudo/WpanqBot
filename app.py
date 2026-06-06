@@ -1,75 +1,110 @@
 import os
+import sqlite3
 import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)  # Разрешаем твоему сайту делать запросы к этому серверу
+CORS(app)
 
-# Берем токен из настроек Render (Environment)
-BOT_TOKEN = "8941568548:AAF6AFi3ZQpaHVPzlQ9TS529zAAcITjwQ6c"
-# Твой личный ID в Telegram (куда бот будет слать сообщения)
-ADMIN_ID = "7586627550"  
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = os.getenv("ADMIN_ID")
 
-@app.route('/')
-def home():
-    return "Bot server is running!"
+DB = "chat.db"
 
-# Эндпоинт, куда сайт отправляет сообщения пользователей
-@app.route('/send_to_tg', methods=['POST'])
-def send_to_tg():
-    data = request.get_json()
-    if not data or 'message' not in data or 'client_id' not in data:
-        return jsonify({"error": "Bad Request"}), 400
-    
-    client_id = data['client_id']
-    user_message = data['message']
-    
-    # Формируем текст для тебя
-    text_to_admin = f"📩 *Новое сообщение!*\n\n*ID:* `{client_id}`\n*Текст:* {user_message}"
-    
-    # Отправляем тебе в Telegram
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": ADMIN_ID,
-        "text": text_to_admin,
-        "parse_mode": "Markdown"
-    }
-    
-    response = requests.post(url, json=payload)
-    if response.status_code == 200:
-        return jsonify({"status": "success"}), 200
-    else:
-        return jsonify({"error": "Failed to send message to Telegram"}), 500
 
-# Эндпоинт Вебхука, куда Telegram присылает твои ОТВЕТЫ
-@app.route('/webhook', methods=['POST'])
+# ---------------- DB ----------------
+def init_db():
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id TEXT,
+            sender TEXT,
+            message TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+init_db()
+
+
+def save_message(client_id, sender, message):
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    c.execute("INSERT INTO messages (client_id, sender, message) VALUES (?, ?, ?)",
+              (client_id, sender, message))
+    conn.commit()
+    conn.close()
+
+
+def get_messages(client_id):
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+    c.execute("SELECT sender, message FROM messages WHERE client_id=? ORDER BY id", (client_id,))
+    rows = c.fetchall()
+    conn.close()
+
+    return [{"sender": r[0], "message": r[1]} for r in rows]
+
+
+# ---------------- SEND TO TG ----------------
+@app.route("/send", methods=["POST"])
+def send():
+    data = request.json
+    client_id = data["client_id"]
+    message = data["message"]
+
+    save_message(client_id, "user", message)
+
+    text = f"📩 NEW MESSAGE\nID: {client_id}\n\n{message}"
+
+    requests.post(
+        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+        json={
+            "chat_id": ADMIN_ID,
+            "text": text
+        }
+    )
+
+    return jsonify({"ok": True})
+
+
+# ---------------- GET CHAT ----------------
+@app.route("/chat/<client_id>")
+def chat(client_id):
+    return jsonify(get_messages(client_id))
+
+
+# ---------------- TELEGRAM WEBHOOK ----------------
+@app.route("/webhook", methods=["POST"])
 def webhook():
-    update = request.get_json()
-    
-    # Проверяем, что это текстовый ответ (Reply) от тебя
-    if "message" in update and "reply_to_message" in update["message"]:
-        message = update["message"]
-        chat_id = message["chat"]["id"]
-        
-        # Проверяем, что отвечаешь именно ты (админ)
-        if str(chat_id) == ADMIN_ID:
-            reply_text = message.get("text")
-            original_text = message["reply_to_message"].get("text", "")
-            
-            # Пытаемся вытащить ID клиента из оригинального сообщения
-            # Ищем строчку "ID: User_XXXXX"
-            try:
-                for line in original_text.split("\n"):
-                    if line.startswith("ID:"):
-                        client_id = line.replace("ID:", "").strip()
-                        print(f"Ответ для клиента {client_id}: {reply_text}")
-                        # Здесь в будущем можно отправлять ответ обратно на сайт
-                        break
-            except Exception as e:
-                print(f"Ошибка при обработке ID клиента: {e}")
-                
-    return "ok", 200
+    update = request.json
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+    if "message" in update:
+        msg = update["message"]
+        chat_id = msg["chat"]["id"]
+
+        if str(chat_id) != str(ADMIN_ID):
+            return "ok"
+
+        if "reply_to_message" in msg:
+            text = msg["text"]
+            original = msg["reply_to_message"]["text"]
+
+            # ищем ID
+            client_id = None
+            for line in original.split("\n"):
+                if "ID:" in line:
+                    client_id = line.replace("ID:", "").strip()
+
+            if client_id:
+                save_message(client_id, "admin", text)
+
+    return "ok"
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
