@@ -8,7 +8,7 @@ app = Flask(__name__)
 CORS(app)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = os.getenv("ADMIN_ID")
+ADMIN_ID = str(os.getenv("ADMIN_ID"))
 
 DB = "chat.db"
 
@@ -28,10 +28,6 @@ def init_db():
         )
     """)
 
-    try:
-        c.execute("ALTER TABLE messages ADD COLUMN created_at DATETIME")
-    except:
-        pass
 
     conn.commit()
     conn.close()
@@ -53,23 +49,23 @@ def save_message(client_id, sender, message):
 def get_messages(client_id):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
+
     c.execute(
-        c.execute(
-    "SELECT sender, message, created_at FROM messages WHERE client_id=? ORDER BY id",
-    (client_id,)
-)
+        "SELECT sender, message, created_at FROM messages WHERE client_id=? ORDER BY id",
+        (client_id,)
     )
+
     rows = c.fetchall()
     conn.close()
 
-   return [
-    {
-        "sender": r[0],
-        "message": r[1],
-        "time": r[2]
-    }
-    for r in rows
-]
+    return [
+        {
+            "sender": r[0],
+            "message": r[1],
+            "time": r[2]
+        }
+        for r in rows
+    ]
 
 
 # ---------------- SEND FROM SITE ----------------
