@@ -16,19 +16,23 @@ DB = "chat.db"
 # ---------------- DB ----------------
 def init_db():
     conn = sqlite3.connect(DB)
+    c = conn.cursor()
+
     c.execute("""
-    CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        client_id TEXT,
-        sender TEXT,
-        message TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-""")
-try:
-    c.execute("ALTER TABLE messages ADD COLUMN created_at DATETIME")
-except:
-    pass
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id TEXT,
+            sender TEXT,
+            message TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    try:
+        c.execute("ALTER TABLE messages ADD COLUMN created_at DATETIME")
+    except:
+        pass
+
     conn.commit()
     conn.close()
 
@@ -50,13 +54,22 @@ def get_messages(client_id):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute(
-        "SELECT sender, message FROM messages WHERE client_id=? ORDER BY id",
-        (client_id,)
+        c.execute(
+    "SELECT sender, message, created_at FROM messages WHERE client_id=? ORDER BY id",
+    (client_id,)
+)
     )
     rows = c.fetchall()
     conn.close()
 
-    return [{"sender": r[0], "message": r[1]} for r in rows]
+   return [
+    {
+        "sender": r[0],
+        "message": r[1],
+        "time": r[2]
+    }
+    for r in rows
+]
 
 
 # ---------------- SEND FROM SITE ----------------
