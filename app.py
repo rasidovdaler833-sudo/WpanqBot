@@ -16,15 +16,19 @@ DB = "chat.db"
 # ---------------- DB ----------------
 def init_db():
     conn = sqlite3.connect(DB)
-    c = conn.cursor()
     c.execute("""
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            client_id TEXT,
-            sender TEXT,
-            message TEXT
-        )
-    """)
+    CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id TEXT,
+        sender TEXT,
+        message TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+""")
+try:
+    c.execute("ALTER TABLE messages ADD COLUMN created_at DATETIME")
+except:
+    pass
     conn.commit()
     conn.close()
 
